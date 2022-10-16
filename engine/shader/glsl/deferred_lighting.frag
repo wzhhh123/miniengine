@@ -63,6 +63,9 @@ void main()
     highp vec4   gbuffer_c = subpassLoad(in_gbuffer_c).rgba;
     DecodeGBufferData(gbuffer, gbuffer_a, gbuffer_b, gbuffer_c);
 
+    //out_color = gbuffer_a;
+    //return;
+
     highp vec3  N                   = gbuffer.worldNormal;
     highp vec3  basecolor           = gbuffer.baseColor;
     highp float metallic            = gbuffer.metallic;

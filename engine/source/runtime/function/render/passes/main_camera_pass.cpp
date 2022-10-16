@@ -26,7 +26,8 @@ namespace Piccolo
         RenderPass::initialize(nullptr);
 
         const MainCameraPassInitInfo* _init_info = static_cast<const MainCameraPassInitInfo*>(init_info);
-        m_enable_fxaa                            = _init_info->enble_fxaa;
+        m_enable_fxaa                            = true;//_init_info->enble_fxaa; 
+         
 
         setupAttachments();
         setupRenderPass();
@@ -109,6 +110,7 @@ namespace Piccolo
 
         m_framebuffer.attachments[_main_camera_pass_post_process_buffer_odd].format  = VK_FORMAT_R16G16B16A16_SFLOAT;
         m_framebuffer.attachments[_main_camera_pass_post_process_buffer_even].format = VK_FORMAT_R16G16B16A16_SFLOAT;
+        //m_framebuffer.attachments[_main_camera_pass_taa_history_buffer].format = VK_FORMAT_R16G16B16A16_SFLOAT;
         for (int attachment_index = _main_camera_pass_custom_attachment_count;
              attachment_index <
              _main_camera_pass_custom_attachment_count + _main_camera_pass_post_process_attachment_count;
@@ -214,6 +216,18 @@ namespace Piccolo
         post_process_odd_color_attachment_description.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
         post_process_odd_color_attachment_description.finalLayout    = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
+        // VkAttachmentDescription& post_process_taa_color_attachment_description =
+        //    attachments[_main_camera_pass_taa_history_buffer];
+        //post_process_odd_color_attachment_description.format =
+        //     m_framebuffer.attachments[_main_camera_pass_taa_history_buffer].format;
+        //post_process_odd_color_attachment_description.samples        = VK_SAMPLE_COUNT_1_BIT;
+        //post_process_odd_color_attachment_description.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        //post_process_odd_color_attachment_description.storeOp        = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        //post_process_odd_color_attachment_description.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        //post_process_odd_color_attachment_description.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        //post_process_odd_color_attachment_description.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
+        //post_process_odd_color_attachment_description.finalLayout    = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
         VkAttachmentDescription& post_process_even_color_attachment_description =
             attachments[_main_camera_pass_post_process_buffer_even];
         post_process_even_color_attachment_description.format =
@@ -234,7 +248,7 @@ namespace Piccolo
         depth_attachment_description.stencilLoadOp            = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         depth_attachment_description.stencilStoreOp           = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         depth_attachment_description.initialLayout            = VK_IMAGE_LAYOUT_UNDEFINED;
-        depth_attachment_description.finalLayout              = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        depth_attachment_description.finalLayout              = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         VkAttachmentDescription& swapchain_image_attachment_description =
             attachments[_main_camera_pass_swap_chain_image];
@@ -257,6 +271,7 @@ namespace Piccolo
         base_pass_color_attachments_reference[1].layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         base_pass_color_attachments_reference[2].attachment = &gbuffer_albedo_attachment_description - attachments;
         base_pass_color_attachments_reference[2].layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
 
         VkAttachmentReference base_pass_depth_attachment_reference {};
         base_pass_depth_attachment_reference.attachment = &depth_attachment_description - attachments;
@@ -408,16 +423,19 @@ namespace Piccolo
         ui_pass.colorAttachmentCount    = 1;
         ui_pass.pColorAttachments       = &ui_pass_color_attachment_reference;
         ui_pass.pDepthStencilAttachment = NULL;
-        ui_pass.preserveAttachmentCount = 1;
-        ui_pass.pPreserveAttachments    = &ui_pass_preserve_attachment;
+        ui_pass.preserveAttachmentCount = 0;
+        ui_pass.pPreserveAttachments    = NULL;
 
-        VkAttachmentReference combine_ui_pass_input_attachments_reference[2] = {};
+        VkAttachmentReference combine_ui_pass_input_attachments_reference[3] = {};
         combine_ui_pass_input_attachments_reference[0].attachment =
             &backup_odd_color_attachment_description - attachments;
         combine_ui_pass_input_attachments_reference[0].layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         combine_ui_pass_input_attachments_reference[1].attachment =
             &backup_even_color_attachment_description - attachments;
         combine_ui_pass_input_attachments_reference[1].layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        combine_ui_pass_input_attachments_reference[2].attachment =
+            &depth_attachment_description - attachments;
+        combine_ui_pass_input_attachments_reference[2].layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         VkAttachmentReference combine_ui_pass_color_attachment_reference {};
         combine_ui_pass_color_attachment_reference.attachment = &swapchain_image_attachment_description - attachments;
@@ -587,7 +605,7 @@ namespace Piccolo
                 VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
             mesh_global_layout_perframe_storage_buffer_binding.descriptorCount = 1;
             mesh_global_layout_perframe_storage_buffer_binding.stageFlags =
-                VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+                VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT; //GBuffer的vertex和DeferredLighting的fragment都有用到这个buffer
             mesh_global_layout_perframe_storage_buffer_binding.pImmutableSamplers = NULL;
 
             VkDescriptorSetLayoutBinding& mesh_global_layout_perdrawcall_storage_buffer_binding =
@@ -659,7 +677,7 @@ namespace Piccolo
             VkDescriptorSetLayoutBinding& mesh_material_layout_uniform_buffer_binding =
                 mesh_material_layout_bindings[0];
             mesh_material_layout_uniform_buffer_binding.binding            = 0;
-            mesh_material_layout_uniform_buffer_binding.descriptorType     = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            mesh_material_layout_uniform_buffer_binding.descriptorType     = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER; // this is a uniform buffer
             mesh_material_layout_uniform_buffer_binding.descriptorCount    = 1;
             mesh_material_layout_uniform_buffer_binding.stageFlags         = VK_SHADER_STAGE_FRAGMENT_BIT;
             mesh_material_layout_uniform_buffer_binding.pImmutableSamplers = nullptr;
@@ -832,6 +850,7 @@ namespace Piccolo
 
         // mesh gbuffer
         {
+            // (0,1,2)
             VkDescriptorSetLayout      descriptorset_layouts[3] = {m_descriptor_infos[_mesh_global].layout,
                                                               m_descriptor_infos[_per_mesh].layout,
                                                               m_descriptor_infos[_mesh_per_material].layout};
@@ -960,6 +979,7 @@ namespace Piccolo
             dynamic_state_create_info.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
             dynamic_state_create_info.dynamicStateCount = 2;
             dynamic_state_create_info.pDynamicStates    = dynamic_states;
+
 
             VkGraphicsPipelineCreateInfo pipelineInfo {};
             pipelineInfo.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -1936,6 +1956,7 @@ namespace Piccolo
                 m_framebuffer.attachments[_main_camera_pass_backup_buffer_even].view,
                 m_framebuffer.attachments[_main_camera_pass_post_process_buffer_odd].view,
                 m_framebuffer.attachments[_main_camera_pass_post_process_buffer_even].view,
+                //m_framebuffer.attachments[_main_camera_pass_taa_history_buffer].view,
                 m_vulkan_rhi->m_depth_image_view,
                 m_vulkan_rhi->m_swapchain_imageviews[i]};
 
@@ -2004,6 +2025,7 @@ namespace Piccolo
             clear_values[_main_camera_pass_gbuffer_c].color                = {{0.0f, 0.0f, 0.0f, 0.0f}};
             clear_values[_main_camera_pass_backup_buffer_odd].color        = {{0.0f, 0.0f, 0.0f, 1.0f}};
             clear_values[_main_camera_pass_backup_buffer_even].color       = {{0.0f, 0.0f, 0.0f, 1.0f}};
+            //clear_values[_main_camera_pass_taa_history_buffer].color       = {{0.0f, 0.0f, 0.0f, 1.0f}};
             clear_values[_main_camera_pass_post_process_buffer_odd].color  = {{0.0f, 0.0f, 0.0f, 1.0f}};
             clear_values[_main_camera_pass_post_process_buffer_even].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
             clear_values[_main_camera_pass_depth].depthStencil             = {1.0f, 0};
@@ -2412,6 +2434,7 @@ namespace Piccolo
                         }
 
                         // bind perdrawcall
+                        // if dynamic buffers are bound into sets, dynamic_offset should be setup
                         uint32_t dynamic_offsets[3] = {perframe_dynamic_offset,
                                                        perdrawcall_dynamic_offset,
                                                        per_drawcall_vertex_blending_dynamic_offset};

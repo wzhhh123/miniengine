@@ -3,7 +3,41 @@
 #extension GL_GOOGLE_include_directive : enable
 
 #include "constants.h"
+#include "structures.h"
 #include "gbuffer.h"
+
+struct DirectionalLight
+{
+    highp vec3 direction;
+    lowp float _padding_direction;
+    highp vec3 color;
+    lowp float _padding_color;
+};
+
+struct PointLight
+{
+    highp vec3  position;
+    highp float radius;
+    highp vec3  intensity;
+    lowp float  _padding_intensity;
+};
+
+layout(set = 0, binding = 0) readonly buffer _unused_name_perframe
+{
+    highp mat4             proj_view_matrix;
+    highp vec3             camera_position;
+    highp float            _padding_camera_position;
+    highp vec3             ambient_light;
+    highp float            _padding_ambient_light;
+    uint             point_light_num;
+    uint             _padding_point_light_num_1;
+    uint             _padding_point_light_num_2;
+    uint             _padding_point_light_num_3;
+    PointLight       scene_point_lights[m_max_point_light_count];
+    DirectionalLight scene_directional_light;
+    highp mat4       directional_light_proj_view;
+};
+
 
 layout(set = 2, binding = 0) uniform _unused_name_permaterial
 {
@@ -66,6 +100,12 @@ void main()
     highp vec3 Le = texture(emissive_color_texture_sampler, in_texcoord).xyz * emissiveFactor;
 
     EncodeGBufferData(gbuffer, out_gbuffer_a, out_gbuffer_b, out_gbuffer_c);
-
+    highp vec4 pos = proj_view_matrix * vec4(in_world_position, 1.0f);
+    pos /= pos.w;
+    highp float xColor = 0.0;
+    highp float yColor = 0.0;
+    if(pos.x > 0.0) xColor = 1.0;
+    if(pos.y > 0.0) yColor = 1.0;
+    //out_gbuffer_a = vec4(xColor, yColor, 0, 1);
     // out_scene_color.rgba = vec4(Le, 1.0);
 }

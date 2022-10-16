@@ -120,7 +120,8 @@ namespace Piccolo
                                                     RenderMaterialData   material_data) override final;
 
         virtual void updatePerFrameBuffer(std::shared_ptr<RenderScene>  render_scene,
-                                          std::shared_ptr<RenderCamera> camera) override final;
+                                          std::shared_ptr<RenderCamera> camera,
+                                          EngineContentViewport         viewport) override final;
 
         VulkanMesh& getEntityMesh(RenderEntity entity);
 

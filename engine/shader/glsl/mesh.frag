@@ -99,6 +99,12 @@ void main()
     highp vec3 result_color;
 
 #include "mesh_lighting.inl"
+    highp vec4 pos = proj_view_matrix * vec4(in_world_position, 1.0f);
+    pos /= pos.w;
+    highp float xColor = 0.0;
+    highp float yColor = 0.0;
+    if(pos.x > 0.0) xColor = 1.0;
+    if(pos.y > 0.0) yColor = 1.0;
+    out_scene_color = vec4(xColor, yColor, 0.0, 1.0);
 
-    out_scene_color = vec4(result_color, 1.0);
 }

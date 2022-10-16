@@ -98,13 +98,15 @@ namespace Piccolo
         m_rhi->prepareContext();
 
         // update per-frame buffer
-        m_render_resource->updatePerFrameBuffer(m_render_scene, m_render_camera);
+        m_render_resource->updatePerFrameBuffer(m_render_scene, m_render_camera, getEngineContentViewport());
 
         // update per-frame visible objects
         m_render_scene->updateVisibleObjects(std::static_pointer_cast<RenderResource>(m_render_resource),
                                              m_render_camera);
 
         // prepare pipeline's render passes data
+        // do culling etc. and push objects's render data into m_main_camera_visible_mesh_nodes, which is referenced by p_main_camera_visible_mesh_nodes.
+        // MainCameraPass::drawMeshGbuffer updata descriptorsets of dynamic and static objects.
         m_render_pipeline->preparePassData(m_render_resource);
 
         // render one frame

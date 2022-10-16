@@ -108,11 +108,39 @@ namespace Piccolo
         getOrCreateVulkanMaterial(rhi, render_entity, material_data);
     }
 
-    void RenderResource::updatePerFrameBuffer(std::shared_ptr<RenderScene>  render_scene,
-                                              std::shared_ptr<RenderCamera> camera)
+
+    template<int base>
+    static float Halton(int index)
     {
+        float result   = 0.0f;
+        float invBase  = 1.0f / base;
+        float fraction = invBase;
+        while (index > 0)
+        {
+            result += (index % base) * fraction;
+            index /= base;
+            fraction *= invBase;
+        }
+        return result;
+    }
+
+    void RenderResource::updatePerFrameBuffer(std::shared_ptr<RenderScene>  render_scene,
+                                              std::shared_ptr<RenderCamera> camera,
+                                              EngineContentViewport viewport)
+    {
+
+        static int frameCount       = 0;
+        frameCount = (frameCount + 1)%8;
+
         Matrix4x4 view_matrix = camera->getViewMatrix();
         Matrix4x4 proj_matrix = camera->getPersProjMatrix();
+    
+        float jitterX = Halton<2>(frameCount), jitterY = Halton<3>(frameCount);
+        // projection matrix, -1 to 1
+        proj_matrix[0][2] = (jitterX - 0.5) * 2 / viewport.width;
+        proj_matrix[1][2] = (jitterY - 0.5) * 2 / viewport.height;
+        //LOG_INFO("{} {} {} {}", viewport.width, viewport.height, jitterX, jitterY);
+
         Vector3   camera_position = camera->position();
         Matrix4x4 proj_view_matrix = proj_matrix * view_matrix;
 

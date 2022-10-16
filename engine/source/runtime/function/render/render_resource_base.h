@@ -4,6 +4,8 @@
 #include "runtime/function/render/render_swap_context.h"
 #include "runtime/function/render/render_type.h"
 
+#include "render_system.h"
+
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -35,7 +37,8 @@ namespace Piccolo
                                                     RenderMaterialData   material_data) = 0;
 
         virtual void updatePerFrameBuffer(std::shared_ptr<RenderScene>  render_scene,
-                                          std::shared_ptr<RenderCamera> camera) = 0;
+                                          std::shared_ptr<RenderCamera> camera,
+                                          EngineContentViewport         viewport) = 0;
 
         // TODO: data caching
         std::shared_ptr<TextureData> loadTextureHDR(std::string file, int desired_channels = 4);

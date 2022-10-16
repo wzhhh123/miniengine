@@ -146,7 +146,7 @@ namespace Piccolo
         ret[1][1]     = 1.f / tan_half_fovy;
         ret[2][2]     = zfar / (znear - zfar);
         ret[3][2]     = -1.f;
-        ret[2][3]     = -(zfar * znear) / (zfar - znear);
+        ret[2][3]     = -(zfar * znear) / (zfar - znear);   //project camera depth into 0-1,buildin perspective matrix. not the traditional opengl style projection matrix which project camera depth into -1 to 1.
 
         return ret;
     }
