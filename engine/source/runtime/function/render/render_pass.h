@@ -22,12 +22,14 @@ namespace Piccolo
         _main_camera_pass_backup_buffer_even            = 4,
         _main_camera_pass_post_process_buffer_odd       = 5,
         _main_camera_pass_post_process_buffer_even      = 6,
-        //_main_camera_pass_taa_history_buffer = 7,
-        _main_camera_pass_depth                         = 7,
-        _main_camera_pass_swap_chain_image              = 8,
+        _main_camera_pass_taa_history_buffer_a = 7,
+        _main_camera_pass_taa_history_buffer_b = 8,
+        _main_camera_pass_depth                         = 9,
+        _main_camera_pass_swap_chain_image              = 10,
         _main_camera_pass_custom_attachment_count       = 5,
         _main_camera_pass_post_process_attachment_count = 2,
-        _main_camera_pass_attachment_count              = 9,
+        _main_camera_pass_post_process_taa_attachment_count = 2,
+        _main_camera_pass_attachment_count              = 11,
     };
 
     enum
@@ -35,6 +37,7 @@ namespace Piccolo
         _main_camera_subpass_basepass = 0,
         _main_camera_subpass_deferred_lighting,
         _main_camera_subpass_forward_lighting,
+        _main_camera_subpass_taa,
         _main_camera_subpass_tone_mapping,
         _main_camera_subpass_color_grading,
         _main_camera_subpass_fxaa,
@@ -67,7 +70,8 @@ namespace Piccolo
             int           width;
             int           height;
             VkFramebuffer framebuffer;
-            VkRenderPass  render_pass;
+            VkRenderPass  render_pass_taa_odd_frame;
+            VkRenderPass  render_pass_taa_even_frame;
 
             std::vector<FrameBufferAttachment> attachments;
         };
@@ -82,6 +86,8 @@ namespace Piccolo
         {
             VkPipelineLayout layout;
             VkPipeline       pipeline;
+            VkPipeline       taa_odd_pipeline;
+            VkPipeline       taa_even_pipeline;
         };
 
         std::shared_ptr<VulkanRHI> m_vulkan_rhi {nullptr};

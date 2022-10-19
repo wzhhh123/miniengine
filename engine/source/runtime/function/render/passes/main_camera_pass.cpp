@@ -30,12 +30,15 @@ namespace Piccolo
          
 
         setupAttachments();
-        setupRenderPass();
+        setupRenderPass(true);
+        setupRenderPass(false);
         setupDescriptorSetLayout();
-        setupPipelines();
+        setupPipelines(true);
+        setupPipelines(false);
         setupDescriptorSet();
         setupFramebufferDescriptorSet();
-        setupSwapchainFramebuffers();
+        setupSwapchainFramebuffers(true);
+        setupSwapchainFramebuffers(false);
 
         setupParticlePass();
     }
@@ -53,7 +56,8 @@ namespace Piccolo
     void MainCameraPass::setupAttachments()
     {
         m_framebuffer.attachments.resize(_main_camera_pass_custom_attachment_count +
-                                         _main_camera_pass_post_process_attachment_count);
+                                         _main_camera_pass_post_process_attachment_count +
+                                         _main_camera_pass_post_process_taa_attachment_count);
 
         m_framebuffer.attachments[_main_camera_pass_gbuffer_a].format          = VK_FORMAT_R8G8B8A8_UNORM;
         m_framebuffer.attachments[_main_camera_pass_gbuffer_b].format          = VK_FORMAT_R8G8B8A8_UNORM;
@@ -69,13 +73,30 @@ namespace Piccolo
                                         m_vulkan_rhi->m_device,
                                         m_vulkan_rhi->m_swapchain_extent.width,
                                         m_vulkan_rhi->m_swapchain_extent.height,
-                                        m_framebuffer.attachments[_main_camera_pass_gbuffer_a].format,
+                                        m_framebuffer.attachments[buffer_index].format,
                                         VK_IMAGE_TILING_OPTIMAL,
                                         VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
                                             VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
                                         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                                        m_framebuffer.attachments[_main_camera_pass_gbuffer_a].image,
-                                        m_framebuffer.attachments[_main_camera_pass_gbuffer_a].mem,
+                                        m_framebuffer.attachments[buffer_index].image,
+                                        m_framebuffer.attachments[buffer_index].mem,
+                                        0,
+                                        1,
+                                        1);
+            }
+            else if (buffer_index == _main_camera_pass_backup_buffer_odd)
+            {
+                VulkanUtil::createImage(m_vulkan_rhi->m_physical_device,
+                                        m_vulkan_rhi->m_device,
+                                        m_vulkan_rhi->m_swapchain_extent.width,
+                                        m_vulkan_rhi->m_swapchain_extent.height,
+                                        m_framebuffer.attachments[buffer_index].format,
+                                        VK_IMAGE_TILING_OPTIMAL,
+                                        VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                                            VK_IMAGE_USAGE_SAMPLED_BIT, // taa input current frame
+                                        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                                        m_framebuffer.attachments[buffer_index].image,
+                                        m_framebuffer.attachments[buffer_index].mem,
                                         0,
                                         1,
                                         1);
@@ -110,7 +131,6 @@ namespace Piccolo
 
         m_framebuffer.attachments[_main_camera_pass_post_process_buffer_odd].format  = VK_FORMAT_R16G16B16A16_SFLOAT;
         m_framebuffer.attachments[_main_camera_pass_post_process_buffer_even].format = VK_FORMAT_R16G16B16A16_SFLOAT;
-        //m_framebuffer.attachments[_main_camera_pass_taa_history_buffer].format = VK_FORMAT_R16G16B16A16_SFLOAT;
         for (int attachment_index = _main_camera_pass_custom_attachment_count;
              attachment_index <
              _main_camera_pass_custom_attachment_count + _main_camera_pass_post_process_attachment_count;
@@ -140,11 +160,48 @@ namespace Piccolo
                                             1,
                                             1);
         }
+
+
+        m_framebuffer.attachments[_main_camera_pass_taa_history_buffer_a].format  = VK_FORMAT_R16G16B16A16_SFLOAT;
+        m_framebuffer.attachments[_main_camera_pass_taa_history_buffer_b].format = VK_FORMAT_R16G16B16A16_SFLOAT;
+        for (int attachment_index =
+                 _main_camera_pass_custom_attachment_count + _main_camera_pass_post_process_attachment_count;
+             attachment_index < _main_camera_pass_custom_attachment_count +
+                                    _main_camera_pass_post_process_attachment_count +
+                                    _main_camera_pass_post_process_taa_attachment_count;
+             ++attachment_index)
+        {
+            VulkanUtil::createImage(m_vulkan_rhi->m_physical_device,
+                                    m_vulkan_rhi->m_device,
+                                    m_vulkan_rhi->m_swapchain_extent.width,
+                                    m_vulkan_rhi->m_swapchain_extent.height,
+                                    m_framebuffer.attachments[attachment_index].format,
+                                    VK_IMAGE_TILING_OPTIMAL,
+                                    VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                                        VK_IMAGE_USAGE_SAMPLED_BIT,
+                                    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                                    m_framebuffer.attachments[attachment_index].image,
+                                    m_framebuffer.attachments[attachment_index].mem,
+                                    0,
+                                    1,
+                                    1);
+
+            m_framebuffer.attachments[attachment_index].view =
+                VulkanUtil::createImageView(m_vulkan_rhi->m_device,
+                                            m_framebuffer.attachments[attachment_index].image,
+                                            m_framebuffer.attachments[attachment_index].format,
+                                            VK_IMAGE_ASPECT_COLOR_BIT,
+                                            VK_IMAGE_VIEW_TYPE_2D,
+                                            1,
+                                            1);
+        }
+
     }
 
-    void MainCameraPass::setupRenderPass()
+    void MainCameraPass::setupRenderPass(bool is_odd)
     {
-        VkAttachmentDescription attachments[_main_camera_pass_attachment_count] = {};
+        //taa double buffer, every frame use one of them, so minues one here.
+        VkAttachmentDescription attachments[_main_camera_pass_attachment_count-1] = {};
 
         VkAttachmentDescription& gbuffer_normal_attachment_description = attachments[_main_camera_pass_gbuffer_a];
         gbuffer_normal_attachment_description.format  = m_framebuffer.attachments[_main_camera_pass_gbuffer_a].format;
@@ -198,7 +255,7 @@ namespace Piccolo
             m_framebuffer.attachments[_main_camera_pass_backup_buffer_even].format;
         backup_even_color_attachment_description.samples        = VK_SAMPLE_COUNT_1_BIT;
         backup_even_color_attachment_description.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        backup_even_color_attachment_description.storeOp        = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        backup_even_color_attachment_description.storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
         backup_even_color_attachment_description.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         backup_even_color_attachment_description.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         backup_even_color_attachment_description.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -210,23 +267,11 @@ namespace Piccolo
             m_framebuffer.attachments[_main_camera_pass_post_process_buffer_odd].format;
         post_process_odd_color_attachment_description.samples        = VK_SAMPLE_COUNT_1_BIT;
         post_process_odd_color_attachment_description.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        post_process_odd_color_attachment_description.storeOp        = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        post_process_odd_color_attachment_description.storeOp        = VK_ATTACHMENT_STORE_OP_STORE; // taa pass color attachment
         post_process_odd_color_attachment_description.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         post_process_odd_color_attachment_description.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         post_process_odd_color_attachment_description.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
         post_process_odd_color_attachment_description.finalLayout    = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        // VkAttachmentDescription& post_process_taa_color_attachment_description =
-        //    attachments[_main_camera_pass_taa_history_buffer];
-        //post_process_odd_color_attachment_description.format =
-        //     m_framebuffer.attachments[_main_camera_pass_taa_history_buffer].format;
-        //post_process_odd_color_attachment_description.samples        = VK_SAMPLE_COUNT_1_BIT;
-        //post_process_odd_color_attachment_description.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        //post_process_odd_color_attachment_description.storeOp        = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        //post_process_odd_color_attachment_description.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        //post_process_odd_color_attachment_description.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        //post_process_odd_color_attachment_description.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
-        //post_process_odd_color_attachment_description.finalLayout    = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         VkAttachmentDescription& post_process_even_color_attachment_description =
             attachments[_main_camera_pass_post_process_buffer_even];
@@ -239,6 +284,19 @@ namespace Piccolo
         post_process_even_color_attachment_description.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         post_process_even_color_attachment_description.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
         post_process_even_color_attachment_description.finalLayout    = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        VkAttachmentDescription& post_process_taa_mrt_attachment_description =
+            attachments[_main_camera_pass_taa_history_buffer_a];
+        post_process_taa_mrt_attachment_description.format =
+            m_framebuffer.attachments[_main_camera_pass_taa_history_buffer_a].format;
+        post_process_taa_mrt_attachment_description.samples            = VK_SAMPLE_COUNT_1_BIT;
+        post_process_taa_mrt_attachment_description.loadOp             = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        post_process_taa_mrt_attachment_description.storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
+        post_process_taa_mrt_attachment_description.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        post_process_taa_mrt_attachment_description.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        post_process_taa_mrt_attachment_description.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
+        post_process_taa_mrt_attachment_description.finalLayout    = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
 
         VkAttachmentDescription& depth_attachment_description = attachments[_main_camera_pass_depth];
         depth_attachment_description.format                   = m_vulkan_rhi->m_depth_image_format;
@@ -336,14 +394,36 @@ namespace Piccolo
         forward_lighting_pass.preserveAttachmentCount = 0;
         forward_lighting_pass.pPreserveAttachments    = NULL;
 
+
+        VkAttachmentReference taa_pass_color_attachments_reference[2] = {};
+        // aa-ed output
+        taa_pass_color_attachments_reference[0].attachment =
+            &backup_even_color_attachment_description - attachments;
+        taa_pass_color_attachments_reference[0].layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        // mrt output as history buffer of next frame
+        taa_pass_color_attachments_reference[1].attachment =
+            &post_process_taa_mrt_attachment_description - attachments;
+        taa_pass_color_attachments_reference[1].layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+      
+        VkSubpassDescription& taa_pass = subpasses[_main_camera_subpass_taa];
+        taa_pass.pipelineBindPoint     = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        taa_pass.inputAttachmentCount  = 0U;
+        taa_pass.pInputAttachments     = NULL;
+        taa_pass.colorAttachmentCount =
+            sizeof(taa_pass_color_attachments_reference) / sizeof(taa_pass_color_attachments_reference[0]);
+        taa_pass.pColorAttachments       = &taa_pass_color_attachments_reference[0];
+        taa_pass.pDepthStencilAttachment = NULL;
+        taa_pass.preserveAttachmentCount = 0;
+        taa_pass.pPreserveAttachments    = NULL;
+
         VkAttachmentReference tone_mapping_pass_input_attachment_reference {};
         tone_mapping_pass_input_attachment_reference.attachment =
-            &backup_odd_color_attachment_description - attachments;
+            &backup_even_color_attachment_description - attachments;
         tone_mapping_pass_input_attachment_reference.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         VkAttachmentReference tone_mapping_pass_color_attachment_reference {};
         tone_mapping_pass_color_attachment_reference.attachment =
-            &backup_even_color_attachment_description - attachments;
+            &backup_odd_color_attachment_description - attachments;
         tone_mapping_pass_color_attachment_reference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
         VkSubpassDescription& tone_mapping_pass   = subpasses[_main_camera_subpass_tone_mapping];
@@ -358,7 +438,7 @@ namespace Piccolo
 
         VkAttachmentReference color_grading_pass_input_attachment_reference {};
         color_grading_pass_input_attachment_reference.attachment =
-            &backup_even_color_attachment_description - attachments;
+            &backup_odd_color_attachment_description - attachments;
         color_grading_pass_input_attachment_reference.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         VkAttachmentReference color_grading_pass_color_attachment_reference {};
@@ -370,7 +450,7 @@ namespace Piccolo
         else
         {
             color_grading_pass_color_attachment_reference.attachment =
-                &backup_odd_color_attachment_description - attachments;
+                &backup_even_color_attachment_description - attachments;
         }
         color_grading_pass_color_attachment_reference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
@@ -392,12 +472,13 @@ namespace Piccolo
         }
         else
         {
-            fxaa_pass_input_attachment_reference.attachment = &backup_even_color_attachment_description - attachments;
+            // do nothing, don't affect backup_even_color_attachment_description of color grading pass, so use backup_odd_color_attachment_description here
+            fxaa_pass_input_attachment_reference.attachment = &backup_odd_color_attachment_description - attachments;
         }
         fxaa_pass_input_attachment_reference.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         VkAttachmentReference fxaa_pass_color_attachment_reference {};
-        fxaa_pass_color_attachment_reference.attachment = &backup_odd_color_attachment_description - attachments;
+        fxaa_pass_color_attachment_reference.attachment = &backup_even_color_attachment_description - attachments;
         fxaa_pass_color_attachment_reference.layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
         VkSubpassDescription& fxaa_pass   = subpasses[_main_camera_subpass_fxaa];
@@ -411,10 +492,10 @@ namespace Piccolo
         fxaa_pass.pPreserveAttachments    = NULL;
 
         VkAttachmentReference ui_pass_color_attachment_reference {};
-        ui_pass_color_attachment_reference.attachment = &backup_even_color_attachment_description - attachments;
+        ui_pass_color_attachment_reference.attachment = &backup_odd_color_attachment_description - attachments;
         ui_pass_color_attachment_reference.layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-        uint32_t ui_pass_preserve_attachment = &backup_odd_color_attachment_description - attachments;
+        uint32_t ui_pass_preserve_attachment = &backup_even_color_attachment_description - attachments;
 
         VkSubpassDescription& ui_pass   = subpasses[_main_camera_subpass_ui];
         ui_pass.pipelineBindPoint       = VK_PIPELINE_BIND_POINT_GRAPHICS;
@@ -428,10 +509,10 @@ namespace Piccolo
 
         VkAttachmentReference combine_ui_pass_input_attachments_reference[3] = {};
         combine_ui_pass_input_attachments_reference[0].attachment =
-            &backup_odd_color_attachment_description - attachments;
+            &backup_even_color_attachment_description - attachments;
         combine_ui_pass_input_attachments_reference[0].layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         combine_ui_pass_input_attachments_reference[1].attachment =
-            &backup_even_color_attachment_description - attachments;
+            &backup_odd_color_attachment_description - attachments;
         combine_ui_pass_input_attachments_reference[1].layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         combine_ui_pass_input_attachments_reference[2].attachment =
             &depth_attachment_description - attachments;
@@ -452,7 +533,7 @@ namespace Piccolo
         combine_ui_pass.preserveAttachmentCount = 0;
         combine_ui_pass.pPreserveAttachments    = NULL;
 
-        VkSubpassDependency dependencies[8] = {};
+        VkSubpassDependency dependencies[9] = {};
 
         VkSubpassDependency& deferred_lighting_pass_depend_on_shadow_map_pass = dependencies[0];
         deferred_lighting_pass_depend_on_shadow_map_pass.srcSubpass           = VK_SUBPASS_EXTERNAL;
@@ -489,8 +570,22 @@ namespace Piccolo
             VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
         forward_lighting_pass_depend_on_deferred_lighting_pass.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
-        VkSubpassDependency& tone_mapping_pass_depend_on_lighting_pass = dependencies[3];
-        tone_mapping_pass_depend_on_lighting_pass.srcSubpass           = _main_camera_subpass_forward_lighting;
+        // taa subpass dependency
+        VkSubpassDependency& taa_pass_depend_on_forward_lighting = dependencies[3];
+        forward_lighting_pass_depend_on_deferred_lighting_pass.srcSubpass = _main_camera_subpass_forward_lighting;
+        forward_lighting_pass_depend_on_deferred_lighting_pass.dstSubpass = _main_camera_subpass_taa;
+        forward_lighting_pass_depend_on_deferred_lighting_pass.srcStageMask =
+            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        forward_lighting_pass_depend_on_deferred_lighting_pass.dstStageMask =
+            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        forward_lighting_pass_depend_on_deferred_lighting_pass.srcAccessMask =
+            VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        forward_lighting_pass_depend_on_deferred_lighting_pass.dstAccessMask =
+            VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+        forward_lighting_pass_depend_on_deferred_lighting_pass.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+        VkSubpassDependency& tone_mapping_pass_depend_on_lighting_pass = dependencies[4];
+        tone_mapping_pass_depend_on_lighting_pass.srcSubpass           = _main_camera_subpass_taa;
         tone_mapping_pass_depend_on_lighting_pass.dstSubpass           = _main_camera_subpass_tone_mapping;
         tone_mapping_pass_depend_on_lighting_pass.srcStageMask =
             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -502,7 +597,7 @@ namespace Piccolo
             VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
         tone_mapping_pass_depend_on_lighting_pass.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
-        VkSubpassDependency& color_grading_pass_depend_on_tone_mapping_pass = dependencies[4];
+        VkSubpassDependency& color_grading_pass_depend_on_tone_mapping_pass = dependencies[5];
         color_grading_pass_depend_on_tone_mapping_pass.srcSubpass           = _main_camera_subpass_tone_mapping;
         color_grading_pass_depend_on_tone_mapping_pass.dstSubpass           = _main_camera_subpass_color_grading;
         color_grading_pass_depend_on_tone_mapping_pass.srcStageMask =
@@ -515,7 +610,7 @@ namespace Piccolo
             VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
         color_grading_pass_depend_on_tone_mapping_pass.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
-        VkSubpassDependency& fxaa_pass_depend_on_color_grading_pass = dependencies[5];
+        VkSubpassDependency& fxaa_pass_depend_on_color_grading_pass = dependencies[6];
         fxaa_pass_depend_on_color_grading_pass.srcSubpass           = _main_camera_subpass_color_grading;
         fxaa_pass_depend_on_color_grading_pass.dstSubpass           = _main_camera_subpass_fxaa;
         fxaa_pass_depend_on_color_grading_pass.srcStageMask =
@@ -527,7 +622,7 @@ namespace Piccolo
         fxaa_pass_depend_on_color_grading_pass.dstAccessMask =
             VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
 
-        VkSubpassDependency& ui_pass_depend_on_fxaa_pass = dependencies[6];
+        VkSubpassDependency& ui_pass_depend_on_fxaa_pass = dependencies[7];
         ui_pass_depend_on_fxaa_pass.srcSubpass           = _main_camera_subpass_fxaa;
         ui_pass_depend_on_fxaa_pass.dstSubpass           = _main_camera_subpass_ui;
         ui_pass_depend_on_fxaa_pass.srcStageMask =
@@ -538,7 +633,7 @@ namespace Piccolo
         ui_pass_depend_on_fxaa_pass.dstAccessMask   = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
         ui_pass_depend_on_fxaa_pass.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
-        VkSubpassDependency& combine_ui_pass_depend_on_ui_pass = dependencies[7];
+        VkSubpassDependency& combine_ui_pass_depend_on_ui_pass = dependencies[8];
         combine_ui_pass_depend_on_ui_pass.srcSubpass           = _main_camera_subpass_ui;
         combine_ui_pass_depend_on_ui_pass.dstSubpass           = _main_camera_subpass_combine_ui;
         combine_ui_pass_depend_on_ui_pass.srcStageMask =
@@ -560,10 +655,21 @@ namespace Piccolo
         renderpass_create_info.dependencyCount = (sizeof(dependencies) / sizeof(dependencies[0]));
         renderpass_create_info.pDependencies   = dependencies;
 
-        if (vkCreateRenderPass(m_vulkan_rhi->m_device, &renderpass_create_info, nullptr, &m_framebuffer.render_pass) !=
-            VK_SUCCESS)
+        if (is_odd)
         {
-            throw std::runtime_error("failed to create render pass");
+            if (vkCreateRenderPass(
+                    m_vulkan_rhi->m_device, &renderpass_create_info, nullptr, &m_framebuffer.render_pass_taa_odd_frame) != VK_SUCCESS)
+            {
+                throw std::runtime_error("failed to create render pass");
+            }
+        }
+        else
+        {
+            if (vkCreateRenderPass(
+                    m_vulkan_rhi->m_device, &renderpass_create_info, nullptr, &m_framebuffer.render_pass_taa_even_frame) != VK_SUCCESS)
+            {
+                throw std::runtime_error("failed to create render pass");
+            }
         }
     }
 
@@ -844,7 +950,7 @@ namespace Piccolo
         }
     }
 
-    void MainCameraPass::setupPipelines()
+    void MainCameraPass::setupPipelines(bool is_odd)
     {
         m_render_pipelines.resize(_render_pipeline_type_count);
 
@@ -993,20 +1099,36 @@ namespace Piccolo
             pipelineInfo.pColorBlendState    = &color_blend_state_create_info;
             pipelineInfo.pDepthStencilState  = &depth_stencil_create_info;
             pipelineInfo.layout              = m_render_pipelines[_render_pipeline_type_mesh_gbuffer].layout;
-            pipelineInfo.renderPass          = m_framebuffer.render_pass;
+            pipelineInfo.renderPass          = is_odd ? m_framebuffer.render_pass_taa_odd_frame : m_framebuffer.render_pass_taa_even_frame;
             pipelineInfo.subpass             = _main_camera_subpass_basepass;
             pipelineInfo.basePipelineHandle  = VK_NULL_HANDLE;
             pipelineInfo.pDynamicState       = &dynamic_state_create_info;
 
-            if (vkCreateGraphicsPipelines(m_vulkan_rhi->m_device,
-                                          VK_NULL_HANDLE,
-                                          1,
-                                          &pipelineInfo,
-                                          nullptr,
-                                          &m_render_pipelines[_render_pipeline_type_mesh_gbuffer].pipeline) !=
-                VK_SUCCESS)
+            if (is_odd)
             {
-                throw std::runtime_error("create mesh gbuffer graphics pipeline");
+                if (vkCreateGraphicsPipelines(m_vulkan_rhi->m_device,
+                                              VK_NULL_HANDLE,
+                                              1,
+                                              &pipelineInfo,
+                                              nullptr,
+                                              &m_render_pipelines[_render_pipeline_type_mesh_gbuffer].taa_odd_pipeline) !=
+                    VK_SUCCESS)
+                {
+                    throw std::runtime_error("create mesh gbuffer graphics pipeline");
+                }
+            }
+            else
+            {
+                if (vkCreateGraphicsPipelines(m_vulkan_rhi->m_device,
+                                              VK_NULL_HANDLE,
+                                              1,
+                                              &pipelineInfo,
+                                              nullptr,
+                                              &m_render_pipelines[_render_pipeline_type_mesh_gbuffer].taa_even_pipeline) !=
+                    VK_SUCCESS)
+                {
+                    throw std::runtime_error("create mesh gbuffer graphics pipeline");
+                }
             }
 
             vkDestroyShaderModule(m_vulkan_rhi->m_device, vert_shader_module, nullptr);
@@ -1142,20 +1264,37 @@ namespace Piccolo
             pipelineInfo.pColorBlendState    = &color_blend_state_create_info;
             pipelineInfo.pDepthStencilState  = &depth_stencil_create_info;
             pipelineInfo.layout              = m_render_pipelines[_render_pipeline_type_deferred_lighting].layout;
-            pipelineInfo.renderPass          = m_framebuffer.render_pass;
+            pipelineInfo.renderPass =
+                is_odd ? m_framebuffer.render_pass_taa_odd_frame : m_framebuffer.render_pass_taa_even_frame;
             pipelineInfo.subpass             = _main_camera_subpass_deferred_lighting;
             pipelineInfo.basePipelineHandle  = VK_NULL_HANDLE;
             pipelineInfo.pDynamicState       = &dynamic_state_create_info;
 
-            if (vkCreateGraphicsPipelines(m_vulkan_rhi->m_device,
-                                          VK_NULL_HANDLE,
-                                          1,
-                                          &pipelineInfo,
-                                          nullptr,
-                                          &m_render_pipelines[_render_pipeline_type_deferred_lighting].pipeline) !=
-                VK_SUCCESS)
+            if (is_odd)
             {
-                throw std::runtime_error("create deferred lighting graphics pipeline");
+                if (vkCreateGraphicsPipelines(m_vulkan_rhi->m_device,
+                                              VK_NULL_HANDLE,
+                                              1,
+                                              &pipelineInfo,
+                                              nullptr,
+                                              &m_render_pipelines[_render_pipeline_type_deferred_lighting].taa_odd_pipeline) !=
+                    VK_SUCCESS)
+                {
+                    throw std::runtime_error("create deferred lighting graphics pipeline");
+                }
+            }
+            else
+            {
+                if (vkCreateGraphicsPipelines(m_vulkan_rhi->m_device,
+                                              VK_NULL_HANDLE,
+                                              1,
+                                              &pipelineInfo,
+                                              nullptr,
+                                              &m_render_pipelines[_render_pipeline_type_deferred_lighting].taa_even_pipeline) !=
+                    VK_SUCCESS)
+                {
+                    throw std::runtime_error("create deferred lighting graphics pipeline");
+                }
             }
 
             vkDestroyShaderModule(m_vulkan_rhi->m_device, vert_shader_module, nullptr);
@@ -1286,20 +1425,37 @@ namespace Piccolo
             pipelineInfo.pColorBlendState    = &color_blend_state_create_info;
             pipelineInfo.pDepthStencilState  = &depth_stencil_create_info;
             pipelineInfo.layout              = m_render_pipelines[_render_pipeline_type_mesh_lighting].layout;
-            pipelineInfo.renderPass          = m_framebuffer.render_pass;
+            pipelineInfo.renderPass =
+                is_odd ? m_framebuffer.render_pass_taa_odd_frame : m_framebuffer.render_pass_taa_even_frame;
             pipelineInfo.subpass             = _main_camera_subpass_forward_lighting;
             pipelineInfo.basePipelineHandle  = VK_NULL_HANDLE;
             pipelineInfo.pDynamicState       = &dynamic_state_create_info;
 
-            if (vkCreateGraphicsPipelines(m_vulkan_rhi->m_device,
-                                          VK_NULL_HANDLE,
-                                          1,
-                                          &pipelineInfo,
-                                          nullptr,
-                                          &m_render_pipelines[_render_pipeline_type_mesh_lighting].pipeline) !=
-                VK_SUCCESS)
+            if (is_odd)
             {
-                throw std::runtime_error("create mesh lighting graphics pipeline");
+                if (vkCreateGraphicsPipelines(m_vulkan_rhi->m_device,
+                                              VK_NULL_HANDLE,
+                                              1,
+                                              &pipelineInfo,
+                                              nullptr,
+                                              &m_render_pipelines[_render_pipeline_type_mesh_lighting].taa_odd_pipeline) !=
+                    VK_SUCCESS)
+                {
+                    throw std::runtime_error("create mesh lighting graphics pipeline");
+                }
+            }
+            else
+            {
+                if (vkCreateGraphicsPipelines(m_vulkan_rhi->m_device,
+                                              VK_NULL_HANDLE,
+                                              1,
+                                              &pipelineInfo,
+                                              nullptr,
+                                              &m_render_pipelines[_render_pipeline_type_mesh_lighting].taa_even_pipeline) !=
+                    VK_SUCCESS)
+                {
+                    throw std::runtime_error("create mesh lighting graphics pipeline");
+                }
             }
 
             vkDestroyShaderModule(m_vulkan_rhi->m_device, vert_shader_module, nullptr);
@@ -1429,21 +1585,37 @@ namespace Piccolo
             pipelineInfo.pColorBlendState    = &color_blend_state_create_info;
             pipelineInfo.pDepthStencilState  = &depth_stencil_create_info;
             pipelineInfo.layout              = m_render_pipelines[_render_pipeline_type_skybox].layout;
-            pipelineInfo.renderPass          = m_framebuffer.render_pass;
+            pipelineInfo.renderPass =
+                is_odd ? m_framebuffer.render_pass_taa_odd_frame : m_framebuffer.render_pass_taa_even_frame;
             pipelineInfo.subpass             = _main_camera_subpass_forward_lighting;
             pipelineInfo.basePipelineHandle  = VK_NULL_HANDLE;
             pipelineInfo.pDynamicState       = &dynamic_state_create_info;
 
-            if (vkCreateGraphicsPipelines(m_vulkan_rhi->m_device,
-                                          VK_NULL_HANDLE,
-                                          1,
-                                          &pipelineInfo,
-                                          nullptr,
-                                          &m_render_pipelines[_render_pipeline_type_skybox].pipeline) != VK_SUCCESS)
+            if (is_odd)
             {
-                throw std::runtime_error("create skybox graphics pipeline");
+                if (vkCreateGraphicsPipelines(m_vulkan_rhi->m_device,
+                                              VK_NULL_HANDLE,
+                                              1,
+                                              &pipelineInfo,
+                                              nullptr,
+                                              &m_render_pipelines[_render_pipeline_type_skybox].taa_odd_pipeline) != VK_SUCCESS)
+                {
+                    throw std::runtime_error("create skybox graphics pipeline");
+                }
             }
+            else
+            {
 
+                     if (vkCreateGraphicsPipelines(m_vulkan_rhi->m_device,
+                                              VK_NULL_HANDLE,
+                                              1,
+                                              &pipelineInfo,
+                                              nullptr,
+                                              &m_render_pipelines[_render_pipeline_type_skybox].taa_even_pipeline) != VK_SUCCESS)
+                {
+                    throw std::runtime_error("create skybox graphics pipeline");
+                }
+            }
             vkDestroyShaderModule(m_vulkan_rhi->m_device, vert_shader_module, nullptr);
             vkDestroyShaderModule(m_vulkan_rhi->m_device, frag_shader_module, nullptr);
         }
@@ -1570,21 +1742,35 @@ namespace Piccolo
             pipelineInfo.pColorBlendState    = &color_blend_state_create_info;
             pipelineInfo.pDepthStencilState  = &depth_stencil_create_info;
             pipelineInfo.layout              = m_render_pipelines[_render_pipeline_type_axis].layout;
-            pipelineInfo.renderPass          = m_framebuffer.render_pass;
+            pipelineInfo.renderPass =
+                is_odd ? m_framebuffer.render_pass_taa_odd_frame : m_framebuffer.render_pass_taa_even_frame;
             pipelineInfo.subpass             = _main_camera_subpass_ui;
             pipelineInfo.basePipelineHandle  = VK_NULL_HANDLE;
             pipelineInfo.pDynamicState       = &dynamic_state_create_info;
-
-            if (vkCreateGraphicsPipelines(m_vulkan_rhi->m_device,
-                                          VK_NULL_HANDLE,
-                                          1,
-                                          &pipelineInfo,
-                                          nullptr,
-                                          &m_render_pipelines[_render_pipeline_type_axis].pipeline) != VK_SUCCESS)
+            if (is_odd)
             {
-                throw std::runtime_error("create axis graphics pipeline");
+                if (vkCreateGraphicsPipelines(m_vulkan_rhi->m_device,
+                                              VK_NULL_HANDLE,
+                                              1,
+                                              &pipelineInfo,
+                                              nullptr,
+                                              &m_render_pipelines[_render_pipeline_type_axis].taa_odd_pipeline) != VK_SUCCESS)
+                {
+                    throw std::runtime_error("create axis graphics pipeline");
+                }
             }
-
+            else
+            {
+                if (vkCreateGraphicsPipelines(m_vulkan_rhi->m_device,
+                                              VK_NULL_HANDLE,
+                                              1,
+                                              &pipelineInfo,
+                                              nullptr,
+                                              &m_render_pipelines[_render_pipeline_type_axis].taa_even_pipeline) != VK_SUCCESS)
+                {
+                    throw std::runtime_error("create axis graphics pipeline");
+                }
+            }
             vkDestroyShaderModule(m_vulkan_rhi->m_device, vert_shader_module, nullptr);
             vkDestroyShaderModule(m_vulkan_rhi->m_device, frag_shader_module, nullptr);
         }
@@ -1941,9 +2127,16 @@ namespace Piccolo
                                NULL);
     }
 
-    void MainCameraPass::setupSwapchainFramebuffers()
+    void MainCameraPass::setupSwapchainFramebuffers(bool is_odd)
     {
-        m_swapchain_framebuffers.resize(m_vulkan_rhi->m_swapchain_imageviews.size());
+        if (is_odd)
+            m_swapchain_taa_odd_framebuffers.resize(m_vulkan_rhi->m_swapchain_imageviews.size());
+        else
+            m_swapchain_taa_even_framebuffers.resize(m_vulkan_rhi->m_swapchain_imageviews.size());
+
+        VkImageView& taa_output_image_view =
+            is_odd ? m_framebuffer.attachments[_main_camera_pass_taa_history_buffer_a].view :
+                     m_framebuffer.attachments[_main_camera_pass_taa_history_buffer_b].view;
 
         // create frame buffer for every imageview
         for (size_t i = 0; i < m_vulkan_rhi->m_swapchain_imageviews.size(); i++)
@@ -1954,16 +2147,16 @@ namespace Piccolo
                 m_framebuffer.attachments[_main_camera_pass_gbuffer_c].view,
                 m_framebuffer.attachments[_main_camera_pass_backup_buffer_odd].view,
                 m_framebuffer.attachments[_main_camera_pass_backup_buffer_even].view,
+                taa_output_image_view,
                 m_framebuffer.attachments[_main_camera_pass_post_process_buffer_odd].view,
                 m_framebuffer.attachments[_main_camera_pass_post_process_buffer_even].view,
-                //m_framebuffer.attachments[_main_camera_pass_taa_history_buffer].view,
                 m_vulkan_rhi->m_depth_image_view,
                 m_vulkan_rhi->m_swapchain_imageviews[i]};
 
             VkFramebufferCreateInfo framebuffer_create_info {};
             framebuffer_create_info.sType      = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
             framebuffer_create_info.flags      = 0U;
-            framebuffer_create_info.renderPass = m_framebuffer.render_pass;
+            framebuffer_create_info.renderPass = is_odd ? m_framebuffer.render_pass_taa_odd_frame : m_framebuffer.render_pass_taa_even_frame;
             framebuffer_create_info.attachmentCount =
                 (sizeof(framebuffer_attachments_for_image_view) / sizeof(framebuffer_attachments_for_image_view[0]));
             framebuffer_create_info.pAttachments = framebuffer_attachments_for_image_view;
@@ -1971,12 +2164,29 @@ namespace Piccolo
             framebuffer_create_info.height       = m_vulkan_rhi->m_swapchain_extent.height;
             framebuffer_create_info.layers       = 1;
 
-            if (vkCreateFramebuffer(
-                    m_vulkan_rhi->m_device, &framebuffer_create_info, nullptr, &m_swapchain_framebuffers[i]) !=
-                VK_SUCCESS)
+            if (is_odd)
             {
-                throw std::runtime_error("create main camera framebuffer");
+                if (vkCreateFramebuffer(m_vulkan_rhi->m_device,
+                                        &framebuffer_create_info,
+                                        nullptr,
+                                        &m_swapchain_taa_odd_framebuffers[i]) !=
+                    VK_SUCCESS)
+                {
+                    throw std::runtime_error("create main camera framebuffer");
+                }
             }
+            else
+            {
+                if (vkCreateFramebuffer(m_vulkan_rhi->m_device,
+                                        &framebuffer_create_info,
+                                        nullptr,
+                                        &m_swapchain_taa_even_framebuffers[i]) != VK_SUCCESS)
+                {
+                    throw std::runtime_error("create main camera framebuffer");
+                }
+
+            }
+  
         }
     }
 
@@ -2011,11 +2221,17 @@ namespace Piccolo
                               ParticlePass&     particle_pass,
                               uint32_t          current_swapchain_image_index)
     {
+        static int frame_cnt = 0;
+        frame_cnt            = (frame_cnt + 1) % 2;
+
         {
             VkRenderPassBeginInfo renderpass_begin_info {};
             renderpass_begin_info.sType             = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-            renderpass_begin_info.renderPass        = m_framebuffer.render_pass;
-            renderpass_begin_info.framebuffer       = m_swapchain_framebuffers[current_swapchain_image_index];
+            renderpass_begin_info.renderPass =
+                frame_cnt % 2 ? m_framebuffer.render_pass_taa_odd_frame : m_framebuffer.render_pass_taa_even_frame;
+            renderpass_begin_info.framebuffer       = frame_cnt % 2 ?
+                                                          m_swapchain_taa_odd_framebuffers[current_swapchain_image_index] :
+                                                          m_swapchain_taa_even_framebuffers[current_swapchain_image_index];
             renderpass_begin_info.renderArea.offset = {0, 0};
             renderpass_begin_info.renderArea.extent = m_vulkan_rhi->m_swapchain_extent;
 
@@ -2082,6 +2298,10 @@ namespace Piccolo
         {
             m_vulkan_rhi->m_vk_cmd_end_debug_utils_label_ext(m_vulkan_rhi->m_current_command_buffer);
         }
+
+        m_vulkan_rhi->m_vk_cmd_next_subpass(m_vulkan_rhi->m_current_command_buffer, VK_SUBPASS_CONTENTS_INLINE);
+
+        taa_pass.draw();
 
         m_vulkan_rhi->m_vk_cmd_next_subpass(m_vulkan_rhi->m_current_command_buffer, VK_SUBPASS_CONTENTS_INLINE);
 

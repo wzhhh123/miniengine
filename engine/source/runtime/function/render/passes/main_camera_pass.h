@@ -95,12 +95,12 @@ namespace Piccolo
     private:
         void setupParticlePass();
         void setupAttachments();
-        void setupRenderPass();
+        void setupRenderPass(bool is_odd);
         void setupDescriptorSetLayout();
-        void setupPipelines();
+        void setupPipelines(bool is_odd);
         void setupDescriptorSet();
         void setupFramebufferDescriptorSet();
-        void setupSwapchainFramebuffers();
+        void setupSwapchainFramebuffers(bool is_odd);
 
         void setupModelGlobalDescriptorSet();
         void setupSkyboxDescriptorSet();
@@ -117,7 +117,8 @@ namespace Piccolo
 
 
     private:
-        std::vector<VkFramebuffer> m_swapchain_framebuffers;
+        std::vector<VkFramebuffer>    m_swapchain_taa_odd_framebuffers;
+        std::vector<VkFramebuffer>    m_swapchain_taa_even_framebuffers;
         std::shared_ptr<ParticlePass> m_particle_pass;
     };
 } // namespace Piccolo
