@@ -14,13 +14,17 @@ namespace Piccolo
     {
     public:
         void initialize(const RenderPassInitInfo* init_info) override final;
+        void preDraw(VkImageView scene_color, VkImageView history_buffer, VkRenderPass render_pass);
         void draw() override final;
 
-        void updateAfterFramebufferRecreate(VkImageView input_attachment);
+        void updateAfterFramebufferRecreate(VkImageView scene_color, VkImageView history_buffer);
 
     private:
         void setupDescriptorSetLayout();
-        void setupPipelines();
+        void setupPipelines(VkRenderPass render_pass);
         void setupDescriptorSet();
+
+        VkImageView _scene_color, _history_buffer; 
+        VkRenderPass _render_pass;
     };
 } // namespace Piccolo

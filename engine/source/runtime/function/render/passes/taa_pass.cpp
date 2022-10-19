@@ -3,8 +3,8 @@
 
 #include "runtime/function/render/passes/taa_pass.h"
 
-#include <post_process_vert.h>
-#include <tone_mapping_frag.h>
+#include <fxaa_vert.h>
+#include <taa.h>
 
 #include <stdexcept>
 
@@ -21,14 +21,20 @@ namespace Piccolo
     {
         m_descriptor_infos.resize(1);
 
-        VkDescriptorSetLayoutBinding post_process_global_layout_bindings[1] = {};
+        VkDescriptorSetLayoutBinding post_process_global_layout_bindings[2] = {};
 
-        VkDescriptorSetLayoutBinding& post_process_global_layout_input_attachment_binding =
+        VkDescriptorSetLayoutBinding& current_frame_scene_color =
             post_process_global_layout_bindings[0];
-        post_process_global_layout_input_attachment_binding.binding         = 0;
-        post_process_global_layout_input_attachment_binding.descriptorType  = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
-        post_process_global_layout_input_attachment_binding.descriptorCount = 1;
-        post_process_global_layout_input_attachment_binding.stageFlags      = VK_SHADER_STAGE_FRAGMENT_BIT;
+        current_frame_scene_color.binding                                   = 0;
+        current_frame_scene_color.descriptorType                            = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+        current_frame_scene_color.descriptorCount                           = 1;
+        current_frame_scene_color.stageFlags                                = VK_SHADER_STAGE_FRAGMENT_BIT;
+        
+        VkDescriptorSetLayoutBinding& history_buffer = post_process_global_layout_bindings[1];
+        history_buffer.binding                                  = 0;
+        history_buffer.descriptorType                           = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+        history_buffer.descriptorCount                          = 1;
+        history_buffer.stageFlags                               = VK_SHADER_STAGE_FRAGMENT_BIT;
 
         VkDescriptorSetLayoutCreateInfo post_process_global_layout_create_info;
         post_process_global_layout_create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -45,7 +51,8 @@ namespace Piccolo
             throw std::runtime_error("create post process global layout");
         }
     }
-    void TaaPass::setupPipelines()
+
+    void TaaPass::setupPipelines(VkRenderPass render_pass)
     {
         m_render_pipelines.resize(1);
 
@@ -62,8 +69,8 @@ namespace Piccolo
             throw std::runtime_error("create post process pipeline layout");
         }
 
-        VkShaderModule vert_shader_module = VulkanUtil::createShaderModule(m_vulkan_rhi->m_device, POST_PROCESS_VERT);
-        VkShaderModule frag_shader_module = VulkanUtil::createShaderModule(m_vulkan_rhi->m_device, TONE_MAPPING_FRAG);
+        VkShaderModule vert_shader_module = VulkanUtil::createShaderModule(m_vulkan_rhi->m_device, FXAA_VERT);
+        VkShaderModule frag_shader_module = VulkanUtil::createShaderModule(m_vulkan_rhi->m_device, TAA);
 
         VkPipelineShaderStageCreateInfo vert_pipeline_shader_stage_create_info {};
         vert_pipeline_shader_stage_create_info.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -79,6 +86,7 @@ namespace Piccolo
 
         VkPipelineShaderStageCreateInfo shader_stages[] = {vert_pipeline_shader_stage_create_info,
                                                            frag_pipeline_shader_stage_create_info};
+
 
         VkPipelineVertexInputStateCreateInfo vertex_input_state_create_info {};
         vertex_input_state_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -117,23 +125,33 @@ namespace Piccolo
         multisample_state_create_info.sampleShadingEnable  = VK_FALSE;
         multisample_state_create_info.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
-        VkPipelineColorBlendAttachmentState color_blend_attachment_state {};
-        color_blend_attachment_state.colorWriteMask =
+        VkPipelineColorBlendAttachmentState color_blend_attachment_state[2] = {};
+        color_blend_attachment_state[0].colorWriteMask =
             VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-        color_blend_attachment_state.blendEnable         = VK_FALSE;
-        color_blend_attachment_state.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-        color_blend_attachment_state.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
-        color_blend_attachment_state.colorBlendOp        = VK_BLEND_OP_ADD;
-        color_blend_attachment_state.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-        color_blend_attachment_state.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-        color_blend_attachment_state.alphaBlendOp        = VK_BLEND_OP_ADD;
+        color_blend_attachment_state[0].blendEnable         = VK_FALSE;
+        color_blend_attachment_state[0].srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+        color_blend_attachment_state[0].dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+        color_blend_attachment_state[0].colorBlendOp        = VK_BLEND_OP_ADD;
+        color_blend_attachment_state[0].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+        color_blend_attachment_state[0].dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+        color_blend_attachment_state[0].alphaBlendOp        = VK_BLEND_OP_ADD;
+
+             color_blend_attachment_state[1].colorWriteMask =
+            VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        color_blend_attachment_state[1].blendEnable         = VK_FALSE;
+        color_blend_attachment_state[1].srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+        color_blend_attachment_state[1].dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+        color_blend_attachment_state[1].colorBlendOp        = VK_BLEND_OP_ADD;
+        color_blend_attachment_state[1].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+        color_blend_attachment_state[1].dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+        color_blend_attachment_state[1].alphaBlendOp        = VK_BLEND_OP_ADD;
 
         VkPipelineColorBlendStateCreateInfo color_blend_state_create_info {};
         color_blend_state_create_info.sType             = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         color_blend_state_create_info.logicOpEnable     = VK_FALSE;
         color_blend_state_create_info.logicOp           = VK_LOGIC_OP_COPY;
-        color_blend_state_create_info.attachmentCount   = 1;
-        color_blend_state_create_info.pAttachments      = &color_blend_attachment_state;
+        color_blend_state_create_info.attachmentCount   = 2;
+        color_blend_state_create_info.pAttachments      = &color_blend_attachment_state[0];
         color_blend_state_create_info.blendConstants[0] = 0.0f;
         color_blend_state_create_info.blendConstants[1] = 0.0f;
         color_blend_state_create_info.blendConstants[2] = 0.0f;
@@ -166,8 +184,8 @@ namespace Piccolo
         pipelineInfo.pColorBlendState    = &color_blend_state_create_info;
         pipelineInfo.pDepthStencilState  = &depth_stencil_create_info;
         pipelineInfo.layout              = m_render_pipelines[0].layout;
-        pipelineInfo.renderPass          = m_framebuffer.render_pass;
-        pipelineInfo.subpass             = _main_camera_subpass_tone_mapping;
+        pipelineInfo.renderPass          = render_pass;
+        pipelineInfo.subpass             = _main_camera_subpass_taa;
         pipelineInfo.basePipelineHandle  = VK_NULL_HANDLE;
         pipelineInfo.pDynamicState       = &dynamic_state_create_info;
 
@@ -181,6 +199,7 @@ namespace Piccolo
         vkDestroyShaderModule(m_vulkan_rhi->m_device, vert_shader_module, nullptr);
         vkDestroyShaderModule(m_vulkan_rhi->m_device, frag_shader_module, nullptr);
     }
+
     void TaaPass::setupDescriptorSet()
     {
         VkDescriptorSetAllocateInfo post_process_global_descriptor_set_alloc_info;
@@ -198,15 +217,23 @@ namespace Piccolo
         }
     }
 
-    void TaaPass::updateAfterFramebufferRecreate(VkImageView input_attachment)
+    void TaaPass::updateAfterFramebufferRecreate(VkImageView scene_color, VkImageView history_buffer)
     {
-        VkDescriptorImageInfo post_process_per_frame_input_attachment_info = {};
-        post_process_per_frame_input_attachment_info.sampler =
+        VkDescriptorImageInfo scene_color_per_frame_attachment_info = {};
+        scene_color_per_frame_attachment_info.sampler =
             VulkanUtil::getOrCreateNearestSampler(m_vulkan_rhi->m_physical_device, m_vulkan_rhi->m_device);
-        post_process_per_frame_input_attachment_info.imageView   = input_attachment;
-        post_process_per_frame_input_attachment_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        scene_color_per_frame_attachment_info.imageView   = scene_color;
+        scene_color_per_frame_attachment_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-        VkWriteDescriptorSet post_process_descriptor_writes_info[1];
+
+        VkDescriptorImageInfo history_buffer_per_frame_attachment_info = {};
+        history_buffer_per_frame_attachment_info.sampler =
+            VulkanUtil::getOrCreateNearestSampler(m_vulkan_rhi->m_physical_device, m_vulkan_rhi->m_device);
+        history_buffer_per_frame_attachment_info.imageView       = history_buffer;
+        history_buffer_per_frame_attachment_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+  
+        VkWriteDescriptorSet post_process_descriptor_writes_info[2];
 
         VkWriteDescriptorSet& post_process_descriptor_input_attachment_write_info =
             post_process_descriptor_writes_info[0];
@@ -215,9 +242,20 @@ namespace Piccolo
         post_process_descriptor_input_attachment_write_info.dstSet          = m_descriptor_infos[0].descriptor_set;
         post_process_descriptor_input_attachment_write_info.dstBinding      = 0;
         post_process_descriptor_input_attachment_write_info.dstArrayElement = 0;
-        post_process_descriptor_input_attachment_write_info.descriptorType  = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+        post_process_descriptor_input_attachment_write_info.descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         post_process_descriptor_input_attachment_write_info.descriptorCount = 1;
-        post_process_descriptor_input_attachment_write_info.pImageInfo = &post_process_per_frame_input_attachment_info;
+        post_process_descriptor_input_attachment_write_info.pImageInfo      = &scene_color_per_frame_attachment_info;
+
+                VkWriteDescriptorSet& post_process_descriptor_input_attachment_write_info =
+            post_process_descriptor_writes_info[1];
+        post_process_descriptor_input_attachment_write_info.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        post_process_descriptor_input_attachment_write_info.pNext           = NULL;
+        post_process_descriptor_input_attachment_write_info.dstSet          = m_descriptor_infos[0].descriptor_set;
+        post_process_descriptor_input_attachment_write_info.dstBinding      = 1;
+        post_process_descriptor_input_attachment_write_info.dstArrayElement = 0;
+        post_process_descriptor_input_attachment_write_info.descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        post_process_descriptor_input_attachment_write_info.descriptorCount = 1;
+        post_process_descriptor_input_attachment_write_info.pImageInfo      = &history_buffer_per_frame_attachment_info;
 
         vkUpdateDescriptorSets(m_vulkan_rhi->m_device,
                                sizeof(post_process_descriptor_writes_info) /
@@ -227,8 +265,18 @@ namespace Piccolo
                                NULL);
     }
 
+    void TaaPass::preDraw(VkImageView scene_color, VkImageView history_buffer, VkRenderPass render_pass)
+    { 
+        _scene_color = scene_color;
+        _history_buffer = history_buffer;
+        _render_pass    = render_pass;
+    }
+
+
     void TaaPass::draw()
     {
+        VkImageView scene_color = _scene_color;
+        VkImageView history_buffer = _history_buffer;
     
         if (m_vulkan_rhi->isDebugLabelEnabled())
         {
@@ -238,9 +286,9 @@ namespace Piccolo
         }
 
         setupDescriptorSetLayout();
-        setupPipelines();
+        setupPipelines(_render_pass);
         setupDescriptorSet();
-        updateAfterFramebufferRecreate(_init_info->input_attachment);
+        updateAfterFramebufferRecreate(scene_color, history_buffer);
 
         m_vulkan_rhi->m_vk_cmd_bind_pipeline(
             m_vulkan_rhi->m_current_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_render_pipelines[0].pipeline);

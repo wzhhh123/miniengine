@@ -8,6 +8,7 @@
 #include "runtime/function/render/passes/tone_mapping_pass.h"
 #include "runtime/function/render/passes/ui_pass.h"
 #include "runtime/function/render/passes/particle_pass.h"
+#include "runtime/function/render/passes/taa_pass.h"
 
 namespace Piccolo
 {
@@ -59,7 +60,9 @@ namespace Piccolo
 
         void preparePassData(std::shared_ptr<RenderResourceBase> render_resource) override final;
 
-        void draw(ColorGradingPass& color_grading_pass,
+        void draw(
+            TaaPass* taa_pass,
+            ColorGradingPass& color_grading_pass,
             FXAAPass& fxaa_pass,
             ToneMappingPass& tone_mapping_pass,
             UIPass& ui_pass,

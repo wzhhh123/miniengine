@@ -2213,7 +2213,9 @@ namespace Piccolo
         setupParticlePass();
     }
 
-    void MainCameraPass::draw(ColorGradingPass& color_grading_pass,
+    void MainCameraPass::draw(
+                              TaaPass*          taa_pass,
+                              ColorGradingPass& color_grading_pass,
                               FXAAPass&         fxaa_pass,
                               ToneMappingPass&  tone_mapping_pass,
                               UIPass&           ui_pass,
@@ -2301,6 +2303,7 @@ namespace Piccolo
 
         m_vulkan_rhi->m_vk_cmd_next_subpass(m_vulkan_rhi->m_current_command_buffer, VK_SUBPASS_CONTENTS_INLINE);
 
+        taa_pass->preDraw()
         taa_pass.draw();
 
         m_vulkan_rhi->m_vk_cmd_next_subpass(m_vulkan_rhi->m_current_command_buffer, VK_SUBPASS_CONTENTS_INLINE);
