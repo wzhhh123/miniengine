@@ -22,10 +22,10 @@ namespace Piccolo
         _main_camera_pass_backup_buffer_even            = 4,
         _main_camera_pass_post_process_buffer_odd       = 5,
         _main_camera_pass_post_process_buffer_even      = 6,
-        _main_camera_pass_taa_history_buffer_a = 7,
-        _main_camera_pass_taa_history_buffer_b = 8,
-        _main_camera_pass_depth                         = 9,
-        _main_camera_pass_swap_chain_image              = 10,
+        _main_camera_pass_depth                         = 7,
+        _main_camera_pass_swap_chain_image              = 8,
+        _main_camera_pass_taa_history_buffer_a              = 9,
+        _main_camera_pass_taa_history_buffer_b              = 10,
         _main_camera_pass_custom_attachment_count       = 5,
         _main_camera_pass_post_process_attachment_count = 2,
         _main_camera_pass_post_process_taa_attachment_count = 2,
@@ -72,6 +72,8 @@ namespace Piccolo
             VkFramebuffer framebuffer;
             VkRenderPass  render_pass_taa_odd_frame;
             VkRenderPass  render_pass_taa_even_frame;
+
+            VkRenderPass current_pass_render_pass;
 
             std::vector<FrameBufferAttachment> attachments;
         };

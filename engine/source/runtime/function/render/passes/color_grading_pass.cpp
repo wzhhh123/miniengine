@@ -15,12 +15,7 @@ namespace Piccolo
         RenderPass::initialize(nullptr);
 
         const ColorGradingPassInitInfo* _init_info = static_cast<const ColorGradingPassInitInfo*>(init_info);
-        m_framebuffer.render_pass                  = _init_info->render_pass;
-
-        setupDescriptorSetLayout();
-        setupPipelines();
-        setupDescriptorSet();
-        updateAfterFramebufferRecreate(_init_info->input_attachment);
+        input_attachment = _init_info->input_attachment;
     }
 
     void ColorGradingPass::setupDescriptorSetLayout()
@@ -58,7 +53,7 @@ namespace Piccolo
         }
     }
 
-    void ColorGradingPass::setupPipelines()
+    void ColorGradingPass::setupPipelines(VkRenderPass render_pass)
     {
         m_render_pipelines.resize(1);
 
@@ -179,7 +174,7 @@ namespace Piccolo
         pipelineInfo.pColorBlendState    = &color_blend_state_create_info;
         pipelineInfo.pDepthStencilState  = &depth_stencil_create_info;
         pipelineInfo.layout              = m_render_pipelines[0].layout;
-        pipelineInfo.renderPass          = m_framebuffer.render_pass;
+        pipelineInfo.renderPass          = render_pass;
         pipelineInfo.subpass             = _main_camera_subpass_color_grading;
         pipelineInfo.basePipelineHandle  = VK_NULL_HANDLE;
         pipelineInfo.pDynamicState       = &dynamic_state_create_info;
@@ -193,6 +188,15 @@ namespace Piccolo
 
         vkDestroyShaderModule(m_vulkan_rhi->m_device, vert_shader_module, nullptr);
         vkDestroyShaderModule(m_vulkan_rhi->m_device, frag_shader_module, nullptr);
+    }
+
+
+    void ColorGradingPass::preDraw(VkRenderPass render_pass)
+    {
+        setupDescriptorSetLayout();
+        setupPipelines(render_pass);
+        setupDescriptorSet();
+        updateAfterFramebufferRecreate();
     }
 
     void ColorGradingPass::setupDescriptorSet()
@@ -212,12 +216,12 @@ namespace Piccolo
         }
     }
 
-    void ColorGradingPass::updateAfterFramebufferRecreate(VkImageView input_attachment)
+    void ColorGradingPass::updateAfterFramebufferRecreate()
     {
         VkDescriptorImageInfo post_process_per_frame_input_attachment_info = {};
         post_process_per_frame_input_attachment_info.sampler =
             VulkanUtil::getOrCreateNearestSampler(m_vulkan_rhi->m_physical_device, m_vulkan_rhi->m_device);
-        post_process_per_frame_input_attachment_info.imageView   = input_attachment;
+        post_process_per_frame_input_attachment_info.imageView   = *input_attachment;
         post_process_per_frame_input_attachment_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         VkDescriptorImageInfo color_grading_LUT_image_info = {};

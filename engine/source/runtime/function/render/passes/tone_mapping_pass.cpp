@@ -15,12 +15,16 @@ namespace Piccolo
         RenderPass::initialize(nullptr);
 
         const ToneMappingPassInitInfo* _init_info = static_cast<const ToneMappingPassInitInfo*>(init_info);
-        m_framebuffer.render_pass                 = _init_info->render_pass;
+        this->input_attachment = _init_info->input_attachment;
+    }
 
+
+    void ToneMappingPass::preDraw(VkRenderPass render_pass)
+    {
         setupDescriptorSetLayout();
-        setupPipelines();
+        setupPipelines(render_pass);
         setupDescriptorSet();
-        updateAfterFramebufferRecreate(_init_info->input_attachment);
+        updateAfterFramebufferRecreate();
     }
 
     void ToneMappingPass::setupDescriptorSetLayout()
@@ -51,7 +55,7 @@ namespace Piccolo
             throw std::runtime_error("create post process global layout");
         }
     }
-    void ToneMappingPass::setupPipelines()
+    void ToneMappingPass::setupPipelines(VkRenderPass render_pass)
     {
         m_render_pipelines.resize(1);
 
@@ -172,7 +176,7 @@ namespace Piccolo
         pipelineInfo.pColorBlendState    = &color_blend_state_create_info;
         pipelineInfo.pDepthStencilState  = &depth_stencil_create_info;
         pipelineInfo.layout              = m_render_pipelines[0].layout;
-        pipelineInfo.renderPass          = m_framebuffer.render_pass;
+        pipelineInfo.renderPass          = render_pass;
         pipelineInfo.subpass             = _main_camera_subpass_tone_mapping;
         pipelineInfo.basePipelineHandle  = VK_NULL_HANDLE;
         pipelineInfo.pDynamicState       = &dynamic_state_create_info;
@@ -204,12 +208,12 @@ namespace Piccolo
         }
     }
 
-    void ToneMappingPass::updateAfterFramebufferRecreate(VkImageView input_attachment)
+    void ToneMappingPass::updateAfterFramebufferRecreate()
     {
         VkDescriptorImageInfo post_process_per_frame_input_attachment_info = {};
         post_process_per_frame_input_attachment_info.sampler =
             VulkanUtil::getOrCreateNearestSampler(m_vulkan_rhi->m_physical_device, m_vulkan_rhi->m_device);
-        post_process_per_frame_input_attachment_info.imageView   = input_attachment;
+        post_process_per_frame_input_attachment_info.imageView   = *input_attachment;
         post_process_per_frame_input_attachment_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         VkWriteDescriptorSet post_process_descriptor_writes_info[1];

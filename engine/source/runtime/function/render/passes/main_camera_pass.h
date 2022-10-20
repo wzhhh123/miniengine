@@ -61,7 +61,7 @@ namespace Piccolo
         void preparePassData(std::shared_ptr<RenderResourceBase> render_resource) override final;
 
         void draw(
-            TaaPass* taa_pass,
+            TaaPass& taa_pass,
             ColorGradingPass& color_grading_pass,
             FXAAPass& fxaa_pass,
             ToneMappingPass& tone_mapping_pass,
@@ -96,7 +96,7 @@ namespace Piccolo
         void setParticlePass(std::shared_ptr<ParticlePass> pass);
 
     private:
-        void setupParticlePass();
+        void setupParticlePass(bool is_odd);
         void setupAttachments();
         void setupRenderPass(bool is_odd);
         void setupDescriptorSetLayout();

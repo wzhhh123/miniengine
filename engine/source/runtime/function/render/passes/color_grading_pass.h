@@ -7,7 +7,7 @@ namespace Piccolo
     struct ColorGradingPassInitInfo : RenderPassInitInfo
     {
         VkRenderPass render_pass;
-        VkImageView  input_attachment;
+        VkImageView*  input_attachment;
     };
 
     class ColorGradingPass : public RenderPass
@@ -15,12 +15,15 @@ namespace Piccolo
     public:
         void initialize(const RenderPassInitInfo* init_info) override final;
         void draw() override final;
-
-        void updateAfterFramebufferRecreate(VkImageView input_attachment);
+        void preDraw(VkRenderPass render_pass);
+        void updateAfterFramebufferRecreate();
 
     private:
         void setupDescriptorSetLayout();
-        void setupPipelines();
+        void setupPipelines(VkRenderPass input_attachment);
         void setupDescriptorSet();
+
+
+        VkImageView* input_attachment;
     };
 } // namespace Piccolo

@@ -15,12 +15,10 @@ namespace Piccolo
         RenderPass::initialize(nullptr);
 
         const CombineUIPassInitInfo* _init_info = static_cast<const CombineUIPassInitInfo*>(init_info);
-        m_framebuffer.render_pass               = _init_info->render_pass;
 
-        setupDescriptorSetLayout();
-        setupPipelines();
-        setupDescriptorSet();
-        updateAfterFramebufferRecreate(_init_info->scene_input_attachment, _init_info->ui_input_attachment);
+        this->scene_input_attachment = _init_info->scene_input_attachment;
+        this->ui_input_attachment    = _init_info->ui_input_attachment;
+
     }
 
     void CombineUIPass::setupDescriptorSetLayout()
@@ -59,7 +57,7 @@ namespace Piccolo
         }
     }
 
-    void CombineUIPass::setupPipelines()
+    void CombineUIPass::setupPipelines(VkRenderPass render_pass)
     {
         m_render_pipelines.resize(1);
 
@@ -180,7 +178,7 @@ namespace Piccolo
         pipelineInfo.pColorBlendState    = &color_blend_state_create_info;
         pipelineInfo.pDepthStencilState  = &depth_stencil_create_info;
         pipelineInfo.layout              = m_render_pipelines[0].layout;
-        pipelineInfo.renderPass          = m_framebuffer.render_pass;
+        pipelineInfo.renderPass          = render_pass;
         pipelineInfo.subpass             = _main_camera_subpass_combine_ui;
         pipelineInfo.basePipelineHandle  = VK_NULL_HANDLE;
         pipelineInfo.pDynamicState       = &dynamic_state_create_info;
@@ -213,19 +211,27 @@ namespace Piccolo
         }
     }
 
-    void CombineUIPass::updateAfterFramebufferRecreate(VkImageView scene_input_attachment,
-                                                       VkImageView ui_input_attachment)
+
+    void CombineUIPass::preDraw(VkRenderPass render_pass)
+    {
+        setupDescriptorSetLayout();
+        setupPipelines(render_pass);
+        setupDescriptorSet();
+        updateAfterFramebufferRecreate();
+    }
+
+    void CombineUIPass::updateAfterFramebufferRecreate()
     {
         VkDescriptorImageInfo per_frame_scene_input_attachment_info = {};
         per_frame_scene_input_attachment_info.sampler =
             VulkanUtil::getOrCreateNearestSampler(m_vulkan_rhi->m_physical_device, m_vulkan_rhi->m_device);
-        per_frame_scene_input_attachment_info.imageView   = scene_input_attachment;
+        per_frame_scene_input_attachment_info.imageView   = *scene_input_attachment;
         per_frame_scene_input_attachment_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         VkDescriptorImageInfo per_frame_ui_input_attachment_info = {};
         per_frame_ui_input_attachment_info.sampler =
             VulkanUtil::getOrCreateNearestSampler(m_vulkan_rhi->m_physical_device, m_vulkan_rhi->m_device);
-        per_frame_ui_input_attachment_info.imageView   = ui_input_attachment;
+        per_frame_ui_input_attachment_info.imageView   = *ui_input_attachment;
         per_frame_ui_input_attachment_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         VkWriteDescriptorSet post_process_descriptor_writes_info[2];

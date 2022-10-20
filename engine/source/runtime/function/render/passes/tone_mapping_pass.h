@@ -7,7 +7,7 @@ namespace Piccolo
     struct ToneMappingPassInitInfo : RenderPassInitInfo
     {
         VkRenderPass render_pass;
-        VkImageView  input_attachment;
+        VkImageView  *input_attachment;
     };
 
     class ToneMappingPass : public RenderPass
@@ -15,12 +15,14 @@ namespace Piccolo
     public:
         void initialize(const RenderPassInitInfo* init_info) override final;
         void draw() override final;
-
-        void updateAfterFramebufferRecreate(VkImageView input_attachment);
+        void preDraw(VkRenderPass);
+        void updateAfterFramebufferRecreate();
 
     private:
         void setupDescriptorSetLayout();
-        void setupPipelines();
+        void setupPipelines(VkRenderPass);
         void setupDescriptorSet();
+
+        VkImageView* input_attachment;
     };
 } // namespace Piccolo

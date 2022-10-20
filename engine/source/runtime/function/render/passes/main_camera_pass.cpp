@@ -40,7 +40,8 @@ namespace Piccolo
         setupSwapchainFramebuffers(true);
         setupSwapchainFramebuffers(false);
 
-        setupParticlePass();
+        setupParticlePass(true);
+        setupParticlePass(false);
     }
 
     void MainCameraPass::preparePassData(std::shared_ptr<RenderResourceBase> render_resource)
@@ -711,7 +712,7 @@ namespace Piccolo
                 VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
             mesh_global_layout_perframe_storage_buffer_binding.descriptorCount = 1;
             mesh_global_layout_perframe_storage_buffer_binding.stageFlags =
-                VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT; //GBufferµÄvertexºÍDeferredLightingµÄfragment¶¼ÓÐÓÃµ½Õâ¸öbuffer
+                VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT; //GBufferï¿½ï¿½vertexï¿½ï¿½DeferredLightingï¿½ï¿½fragmentï¿½ï¿½ï¿½ï¿½ï¿½Ãµï¿½ï¿½ï¿½ï¿½buffer
             mesh_global_layout_perframe_storage_buffer_binding.pImmutableSamplers = NULL;
 
             VkDescriptorSetLayoutBinding& mesh_global_layout_perdrawcall_storage_buffer_binding =
@@ -2147,11 +2148,12 @@ namespace Piccolo
                 m_framebuffer.attachments[_main_camera_pass_gbuffer_c].view,
                 m_framebuffer.attachments[_main_camera_pass_backup_buffer_odd].view,
                 m_framebuffer.attachments[_main_camera_pass_backup_buffer_even].view,
-                taa_output_image_view,
                 m_framebuffer.attachments[_main_camera_pass_post_process_buffer_odd].view,
                 m_framebuffer.attachments[_main_camera_pass_post_process_buffer_even].view,
                 m_vulkan_rhi->m_depth_image_view,
-                m_vulkan_rhi->m_swapchain_imageviews[i]};
+                m_vulkan_rhi->m_swapchain_imageviews[i],
+                taa_output_image_view
+                        };
 
             VkFramebufferCreateInfo framebuffer_create_info {};
             framebuffer_create_info.sType      = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
@@ -2199,7 +2201,12 @@ namespace Piccolo
             vkFreeMemory(m_vulkan_rhi->m_device, m_framebuffer.attachments[i].mem, nullptr);
         }
 
-        for (auto framebuffer : m_swapchain_framebuffers)
+        for (auto framebuffer : m_swapchain_taa_even_framebuffers)
+        {
+            vkDestroyFramebuffer(m_vulkan_rhi->m_device, framebuffer, NULL);
+        }
+
+        for (auto framebuffer : m_swapchain_taa_odd_framebuffers)
         {
             vkDestroyFramebuffer(m_vulkan_rhi->m_device, framebuffer, NULL);
         }
@@ -2208,13 +2215,15 @@ namespace Piccolo
 
         setupFramebufferDescriptorSet();
 
-        setupSwapchainFramebuffers();
+        setupSwapchainFramebuffers(true);
+        setupSwapchainFramebuffers(false);
 
-        setupParticlePass();
+        setupParticlePass(true);
+        setupParticlePass(false);
     }
 
     void MainCameraPass::draw(
-                              TaaPass*          taa_pass,
+                              TaaPass&          taa_pass,
                               ColorGradingPass& color_grading_pass,
                               FXAAPass&         fxaa_pass,
                               ToneMappingPass&  tone_mapping_pass,
@@ -2225,29 +2234,36 @@ namespace Piccolo
     {
         static int frame_cnt = 0;
         frame_cnt            = (frame_cnt + 1) % 2;
+        bool is_odd = frame_cnt%2; // odd:=write to buffer a, buffer b as input
+
+
+
+        VkRenderPass current_render_pass = is_odd ? m_framebuffer.render_pass_taa_odd_frame :
+                                       m_framebuffer.render_pass_taa_even_frame;
+
 
         {
             VkRenderPassBeginInfo renderpass_begin_info {};
             renderpass_begin_info.sType             = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
             renderpass_begin_info.renderPass =
-                frame_cnt % 2 ? m_framebuffer.render_pass_taa_odd_frame : m_framebuffer.render_pass_taa_even_frame;
-            renderpass_begin_info.framebuffer       = frame_cnt % 2 ?
+                is_odd ? m_framebuffer.render_pass_taa_odd_frame : m_framebuffer.render_pass_taa_even_frame;
+            renderpass_begin_info.framebuffer       = is_odd ?
                                                           m_swapchain_taa_odd_framebuffers[current_swapchain_image_index] :
                                                           m_swapchain_taa_even_framebuffers[current_swapchain_image_index];
             renderpass_begin_info.renderArea.offset = {0, 0};
             renderpass_begin_info.renderArea.extent = m_vulkan_rhi->m_swapchain_extent;
 
-            VkClearValue clear_values[_main_camera_pass_attachment_count];
+            VkClearValue clear_values[_main_camera_pass_attachment_count-1];
             clear_values[_main_camera_pass_gbuffer_a].color                = {{0.0f, 0.0f, 0.0f, 0.0f}};
             clear_values[_main_camera_pass_gbuffer_b].color                = {{0.0f, 0.0f, 0.0f, 0.0f}};
             clear_values[_main_camera_pass_gbuffer_c].color                = {{0.0f, 0.0f, 0.0f, 0.0f}};
             clear_values[_main_camera_pass_backup_buffer_odd].color        = {{0.0f, 0.0f, 0.0f, 1.0f}};
             clear_values[_main_camera_pass_backup_buffer_even].color       = {{0.0f, 0.0f, 0.0f, 1.0f}};
-            //clear_values[_main_camera_pass_taa_history_buffer].color       = {{0.0f, 0.0f, 0.0f, 1.0f}};
             clear_values[_main_camera_pass_post_process_buffer_odd].color  = {{0.0f, 0.0f, 0.0f, 1.0f}};
             clear_values[_main_camera_pass_post_process_buffer_even].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
-            clear_values[_main_camera_pass_depth].depthStencil             = {1.0f, 0};
-            clear_values[_main_camera_pass_swap_chain_image].color         = {{0.0f, 0.0f, 0.0f, 1.0f}};
+            clear_values[_main_camera_pass_depth-1].depthStencil             = {1.0f, 0};
+            clear_values[_main_camera_pass_swap_chain_image-1].color         = {{0.0f, 0.0f, 0.0f, 1.0f}};
+            clear_values[_main_camera_pass_taa_history_buffer_a].color       = {{0.0f, 0.0f, 0.0f, 1.0f}};
             renderpass_begin_info.clearValueCount = (sizeof(clear_values) / sizeof(clear_values[0]));
             renderpass_begin_info.pClearValues    = clear_values;
 
@@ -2303,7 +2319,17 @@ namespace Piccolo
 
         m_vulkan_rhi->m_vk_cmd_next_subpass(m_vulkan_rhi->m_current_command_buffer, VK_SUBPASS_CONTENTS_INLINE);
 
-        taa_pass->preDraw()
+        // set input buffer
+        if (is_odd)
+            taa_pass.preDraw(m_framebuffer.attachments[_main_camera_pass_backup_buffer_odd].view,
+                              m_framebuffer.attachments[_main_camera_pass_taa_history_buffer_b].view,
+                              is_odd ? m_framebuffer.render_pass_taa_odd_frame :
+                                       m_framebuffer.render_pass_taa_even_frame);
+        else
+            taa_pass.preDraw(m_framebuffer.attachments[_main_camera_pass_backup_buffer_odd].view,
+                              m_framebuffer.attachments[_main_camera_pass_taa_history_buffer_a].view,
+                              is_odd ? m_framebuffer.render_pass_taa_odd_frame :
+                                       m_framebuffer.render_pass_taa_even_frame);
         taa_pass.draw();
 
         m_vulkan_rhi->m_vk_cmd_next_subpass(m_vulkan_rhi->m_current_command_buffer, VK_SUBPASS_CONTENTS_INLINE);
@@ -2312,6 +2338,7 @@ namespace Piccolo
 
         m_vulkan_rhi->m_vk_cmd_next_subpass(m_vulkan_rhi->m_current_command_buffer, VK_SUBPASS_CONTENTS_INLINE);
 
+        color_grading_pass.preDraw(current_render_pass,)
         color_grading_pass.draw();
 
         m_vulkan_rhi->m_vk_cmd_next_subpass(m_vulkan_rhi->m_current_command_buffer, VK_SUBPASS_CONTENTS_INLINE);
@@ -2363,8 +2390,8 @@ namespace Piccolo
         {
             VkRenderPassBeginInfo renderpass_begin_info {};
             renderpass_begin_info.sType             = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-            renderpass_begin_info.renderPass        = m_framebuffer.render_pass;
-            renderpass_begin_info.framebuffer       = m_swapchain_framebuffers[current_swapchain_image_index];
+            renderpass_begin_info.renderPass = m_framebuffer.render_pass_taa_even_frame; // don't care forward light
+            renderpass_begin_info.framebuffer       = m_swapchain_taa_odd_framebuffers[current_swapchain_image_index];
             renderpass_begin_info.renderArea.offset = {0, 0};
             renderpass_begin_info.renderArea.extent = m_vulkan_rhi->m_swapchain_extent;
 
@@ -3098,12 +3125,15 @@ namespace Piccolo
 
     VkCommandBuffer MainCameraPass::getRenderCommandBuffer() { return m_vulkan_rhi->m_current_command_buffer; }
 
-    void MainCameraPass::setupParticlePass()
+    void MainCameraPass::setupParticlePass(bool is_odd)
     {
         m_particle_pass->setDepthAndNormalImage(m_vulkan_rhi->m_depth_image,
                                                 m_framebuffer.attachments[_main_camera_pass_gbuffer_a].image);
 
-        m_particle_pass->setRenderPassHandle(m_framebuffer.render_pass);
+        if (is_odd)
+            m_particle_pass->setRenderPassHandle(m_framebuffer.render_pass_taa_odd_frame);
+        else
+            m_particle_pass->setRenderPassHandle(m_framebuffer.render_pass_taa_even_frame);
     }
 
     void MainCameraPass::setParticlePass(std::shared_ptr<ParticlePass> pass) { m_particle_pass = pass; }

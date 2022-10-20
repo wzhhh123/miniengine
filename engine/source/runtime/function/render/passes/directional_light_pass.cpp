@@ -150,7 +150,8 @@ namespace Piccolo
         renderpass_create_info.dependencyCount = (sizeof(dependencies) / sizeof(dependencies[0]));
         renderpass_create_info.pDependencies   = dependencies;
 
-        if (vkCreateRenderPass(m_vulkan_rhi->m_device, &renderpass_create_info, nullptr, &m_framebuffer.render_pass) !=
+        if (vkCreateRenderPass(
+                m_vulkan_rhi->m_device, &renderpass_create_info, nullptr, &m_framebuffer.current_pass_render_pass) !=
             VK_SUCCESS)
         {
             throw std::runtime_error("create directional light shadow render pass");
@@ -163,7 +164,7 @@ namespace Piccolo
         VkFramebufferCreateInfo framebuffer_create_info {};
         framebuffer_create_info.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         framebuffer_create_info.flags           = 0U;
-        framebuffer_create_info.renderPass      = m_framebuffer.render_pass;
+        framebuffer_create_info.renderPass      = m_framebuffer.current_pass_render_pass;
         framebuffer_create_info.attachmentCount = (sizeof(attachments) / sizeof(attachments[0]));
         framebuffer_create_info.pAttachments    = attachments;
         framebuffer_create_info.width           = s_directional_light_shadow_map_dimension;
@@ -357,7 +358,7 @@ namespace Piccolo
         pipelineInfo.pColorBlendState    = &color_blend_state_create_info;
         pipelineInfo.pDepthStencilState  = &depth_stencil_create_info;
         pipelineInfo.layout              = m_render_pipelines[0].layout;
-        pipelineInfo.renderPass          = m_framebuffer.render_pass;
+        pipelineInfo.renderPass          = m_framebuffer.current_pass_render_pass;
         pipelineInfo.subpass             = 0;
         pipelineInfo.basePipelineHandle  = VK_NULL_HANDLE;
         pipelineInfo.pDynamicState       = &dynamic_state_create_info;
@@ -501,7 +502,7 @@ namespace Piccolo
         {
             VkRenderPassBeginInfo renderpass_begin_info {};
             renderpass_begin_info.sType             = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-            renderpass_begin_info.renderPass        = m_framebuffer.render_pass;
+            renderpass_begin_info.renderPass        = m_framebuffer.current_pass_render_pass;
             renderpass_begin_info.framebuffer       = m_framebuffer.framebuffer;
             renderpass_begin_info.renderArea.offset = {0, 0};
             renderpass_begin_info.renderArea.extent = {s_directional_light_shadow_map_dimension,
